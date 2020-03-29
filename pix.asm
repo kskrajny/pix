@@ -2,9 +2,6 @@ section .bss
     digitSpace resb 100
     digitSpacePos resb 8
 
-section .data
-    text db "Hello, World!",10,0
-
 section .text
     global _start
 
@@ -13,65 +10,101 @@ section .text
     ;rsi *pidx - wskaznik na iterator
     ;rdx max - liczba, przeniesc do r12
 
-%macro addFract 0       ;dodaje czesc sumy do calosci
+%macro addFract 0       ;dodaje cyfry rozwiniecia ulamka
     mov r9, 8           ;tworzymy mianownik
-    imul r9, r11
-    add r9, r8
-    mov rdx, 0          
-    mov rax, r10        ;teraz chce miec r10/r9
+    imul r9, r12
+    add r9, r8          ;mianownik: r9 <- 8r9+r8
+    mov r8, r11         ;iterator jako r8
+    mov rax, 1
+%%loop:                 ;w petli tworzymy 16^(8r11)/q mod(2^64)
+    mov rdx, 0
+    cmp r8, 1
+    jl %%minus
+    je %%endLoop
+    shl rax, 32
     div r9
-    mov rdx, 0      
-    imul rcx            ;liczymy 2^32*rcx/r9
-    add rbx, rax        ;dodajemy ulamek mod(2^32) 
-%%skip:
+    dec r8
+    mov rax, rdx
+    jmp %%loop
+%%endLoop:
+    shl rax, cl
+    div r9
+    mov rax, rdx
+    mov rdx, 0
+    shl rax, 48
+    div r9
+    jmp %%last
+%%minus:  
+    shl rax, cl
+    shl rax, 16
+    div r9
+%%last:
+    mov rdx, 0
+    imul r10                        
+    add rbx, rax        ;dodajemy wynik mod(2^64) 
 %endmacro
 
 _start:
 
-    mov r12, 2
-    imul r12, 8
+    mov r12, 32
+    inc r12
     call _sum
 
-    movsx rax, ebx
+
+print:
+    xor rax, rax
+    mov rax, rbx
+oprint:
+    shl rax, 16
+    shr rax, 32
     call _printRAX
 
+exit:
     mov rax, 60
     mov rdi, 0
     syscall
 
 
 _sum:
-            ;r9 przez to dzielimy w addFract
-            ;r8 pomaga stworzyc mianownik
-            ;rcx bedzie licznikiem ulamkow
-    mov r11, 9          
+                            ;r12 iterator
+                            ;r9 przez to dzielimy w addFract
+                            ;r8 pomaga stworzyc mianownik
+                            ;r10 bedzie licznikiem ulamkow    
+    mov cl, 0               ;to mnozyc razy 1/q
+    mov r11, 0              ;ile razy mnozyc 1/q przez 2^32
     mov rbx, 0              ;tu bedzie wynik
-    mov r10, 1              ;to do mnozenia
+
 _sumLoop:
- 
-    cmp 0, r12            ;czy konczyc petle
-    je endSum
     
-    mov rcx, 4
+    cmp cl, 32
+    jne _skip
+    mov cl, 0
+    inc r11
+    
+_skip: 
+    cmp r12, 0
+    je _endSum
+    dec r12
+
+    mov r10, 4
     mov r8, 1
     addFract
 
-    mov rcx, -2
+    mov r10, -2
     mov r8, 4
     addFract
 
-    mov rcx, -1
+    mov r10, -1
     mov r8, 5
     addFract
 
-    mov rcx, -1
+    mov r10, -1
     mov r8, 6
     addFract
 
-    dec r12
-    imul r10, 4
+    add cl, 4
     jmp _sumLoop
-endSum:
+_endSum:
     ret
 
 
